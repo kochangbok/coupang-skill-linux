@@ -17,6 +17,8 @@ export interface SearchResult {
 /** 쿠팡 페이지에서 로그인 여부 확인 */
 async function checkLoginOnPage(page: Page): Promise<boolean> {
   return page.evaluate(() => {
+    // Access Denied 페이지면 로그인 판단 불가
+    if (document.body.innerText.includes("Access Denied")) return false;
     const loginLink = document.querySelector('a[href*="login.coupang.com"]');
     // 로그인 링크가 보이면 미로그인 상태
     return !loginLink;
@@ -38,12 +40,28 @@ async function tryAutoLogin(page: Page, context: BrowserContext): Promise<boolea
 
   console.log(chalk.gray("   로그인이 필요합니다. 자동 로그인 시도..."));
 
-  // 네이버 경유 후 로그인 (봇 감지 우회)
+  // 네이버 → "쿠팡" 검색 → 쿠팡 링크 클릭 → 로그인 페이지 이동
   await page.goto("https://www.naver.com/", { waitUntil: "domcontentloaded" });
   await randomDelay(800, 1500);
+  const loginSearchInput = await page.$('input#query, input[name="query"]');
+  if (loginSearchInput) {
+    await loginSearchInput.click();
+    await randomDelay(300, 600);
+    await loginSearchInput.fill("쿠팡");
+    await randomDelay(300, 500);
+    await page.keyboard.press("Enter");
+    await randomDelay(2000, 3000);
+
+    // 네이버 검색 결과에서 쿠팡 링크 클릭
+    const coupangLink = await page.$('a[href*="coupang.com"]');
+    if (coupangLink) {
+      await coupangLink.click();
+      await randomDelay(2000, 3000);
+    }
+  }
   await page.goto("https://login.coupang.com/login/login.pang", {
     waitUntil: "domcontentloaded",
-    referer: "https://www.naver.com/",
+    referer: "https://www.coupang.com/",
   });
   await randomDelay(1000, 2000);
   await takeScreenshot(page, "login-page");
@@ -75,18 +93,54 @@ async function tryAutoLogin(page: Page, context: BrowserContext): Promise<boolea
   }
 }
 
+async function navigateToCoupangViaSearch(page: Page): Promise<Page> {
+  // 1. 네이버 이동
+  console.log(chalk.gray("   네이버로 이동..."));
+  await page.goto("https://www.naver.com/", { waitUntil: "domcontentloaded" });
+  await randomDelay(1000, 2000);
+
+  // 2. 네이버에서 "쿠팡" 검색 (브라우저 히스토리/referrer 생성 목적)
+  const naverSearchInput = await page.$('input#query, input[name="query"]');
+  if (naverSearchInput) {
+    await naverSearchInput.click();
+    await randomDelay(300, 600);
+    await naverSearchInput.fill("쿠팡");
+    await randomDelay(300, 500);
+    await page.keyboard.press("Enter");
+    await randomDelay(2000, 3000);
+    await takeScreenshot(page, "01-naver-search-coupang");
+    console.log(chalk.gray("   네이버 검색 완료, 쿠팡으로 이동..."));
+  }
+
+  // 3. 네이버 검색 결과에서 쿠팡 링크 클릭
+  const coupangLink = await page.$('a[href="https://www.coupang.com/"]');
+  if (coupangLink) {
+    console.log(chalk.gray("   네이버에서 쿠팡 링크 클릭..."));
+    const [newPage] = await Promise.all([
+      page.context().waitForEvent("page", { timeout: 10_000 }).catch(() => null),
+      coupangLink.click(),
+    ]);
+    if (newPage) {
+      await newPage.waitForLoadState("domcontentloaded");
+      page = newPage;
+    }
+  } else {
+    // fallback: 직접 이동
+    console.log(chalk.gray("   쿠팡 링크 미발견, 직접 이동..."));
+    await page.goto("https://www.coupang.com/", { waitUntil: "domcontentloaded" });
+  }
+
+  await randomDelay(2000, 3000);
+  await takeScreenshot(page, "02-coupang-home");
+  console.log(chalk.gray(`   쿠팡 진입: ${page.url()}`));
+  return page;
+}
+
 async function searchProducts(initialPage: Page, query: string, context: BrowserContext): Promise<{ results: SearchResult[]; page: Page }> {
-  let page: Page = initialPage;
+  // 1. 네이버 → "쿠팡" 검색 → 쿠팡 링크 클릭 → 쿠팡 이동
+  let page = await navigateToCoupangViaSearch(initialPage);
 
-  // 1. 쿠팡 홈으로 직접 이동
-  await page.goto("https://www.coupang.com/", {
-    waitUntil: "domcontentloaded",
-  });
-  await randomDelay(1500, 2500);
-  await takeScreenshot(page, "01-coupang-home");
-  console.log(chalk.gray(`   현재 URL: ${page.url()}`));
-
-  // 2. 로그인 여부 확인 → 미로그인이면 자동 로그인 시도
+  // 2. 로그인 여부 확인 → 미로그인이면 자동 로그인
   const isLoggedIn = await checkLoginOnPage(page);
   if (!isLoggedIn) {
     const loginOk = await tryAutoLogin(page, context);
@@ -95,41 +149,117 @@ async function searchProducts(initialPage: Page, query: string, context: Browser
     }
     // 로그인 후 쿠팡 홈으로 돌아가기
     if (loginOk) {
-      await page.goto("https://www.coupang.com/", {
-        waitUntil: "domcontentloaded",
-      });
+      await page.goto("https://www.coupang.com/", { waitUntil: "domcontentloaded" });
       await randomDelay(1000, 2000);
     }
   } else {
     console.log(chalk.green("   ✅ 로그인 확인됨"));
   }
 
-  // 3. 쿠팡 검색창에 입력
+  // 3. 쿠팡 홈에서 자연스럽게 둘러보기 (봇 감지 회피)
+  if (!page.url().includes("coupang.com")) {
+    await page.goto("https://www.coupang.com/", { waitUntil: "domcontentloaded" });
+    await randomDelay(2000, 3000);
+  }
+  console.log(chalk.gray("   쿠팡 홈 둘러보는 중..."));
+  await naturalScroll(page, 2);
+  await page.keyboard.press("Home");
+  await randomDelay(1500, 2500);
+
+  // 4. 쿠팡 검색창에서 상품 검색 (키보드 입력으로 자연스럽게)
+  console.log(chalk.gray(`   쿠팡에서 "${query}" 검색...`));
   const searchInput = await page.$('input.search-input, input[name="q"], input#headerSearchKeyword');
   if (searchInput) {
     await searchInput.click();
-    await randomDelay(300, 600);
-    await searchInput.fill(query);
-    await randomDelay(300, 500);
-    await page.keyboard.press("Enter");
+    await randomDelay(500, 1000);
+    // 자연스러운 타이핑 (랜덤 딜레이)
+    for (const char of query) {
+      await page.keyboard.type(char, { delay: Math.floor(Math.random() * 100) + 50 });
+    }
+    await randomDelay(800, 1500);
+    // 검색 버튼 클릭 (Enter 대신 버튼 클릭이 더 자연스러움)
+    const searchBtn = await page.$('button.search-btn, button[type="submit"], .search-submit, button.HeaderSearchForm__button');
+    if (searchBtn) {
+      await searchBtn.click();
+    } else {
+      await page.keyboard.press("Enter");
+    }
   } else {
     // fallback: URL로 직접 검색
-    const searchUrl = `https://www.coupang.com/np/search?component=&q=${encodeURIComponent(query)}&channel=user`;
-    await page.goto(searchUrl, {
+    await page.goto(`https://www.coupang.com/np/search?component=&q=${encodeURIComponent(query)}&channel=user`, {
       waitUntil: "domcontentloaded",
       referer: "https://www.coupang.com/",
     });
   }
 
-  await randomDelay(2000, 3000);
+  // 검색 결과 로드 대기
+  await randomDelay(3000, 4000);
+
+  // 자연 스크롤로 DOM 완전 로드 (블로그 권장: PageDown + End 키)
+  console.log(chalk.gray("   검색 결과 로드 중 (스크롤)..."));
+  await naturalScroll(page, 3);
+  // 다시 맨 위로 스크롤
+  await page.keyboard.press("Home");
+  await randomDelay(1000, 2000);
 
   // 4. 검색 결과 페이지 검증
   await takeScreenshot(page, "04-search-result");
   console.log(chalk.gray(`   검색 URL: ${page.url()}`));
 
-  // 6. 새 DOM 구조에 맞춰 파싱 (ProductUnit 기반)
+  // Access Denied 체크 → 재시도
+  const bodyText = await page.evaluate(() => document.body.innerText.slice(0, 500));
+  if (bodyText.includes("Access Denied") || bodyText.includes("접근이 거부")) {
+    console.log(chalk.yellow("   Access Denied 감지. 뒤로가서 재시도..."));
+    await page.goBack();
+    await randomDelay(3000, 5000);
+    await naturalScroll(page, 2);
+    await page.keyboard.press("Home");
+    await randomDelay(2000, 3000);
+
+    // 재시도: 검색창에서 다시 검색
+    const retryInput = await page.$('input.search-input, input[name="q"], input#headerSearchKeyword');
+    if (retryInput) {
+      await retryInput.click();
+      await randomDelay(500, 1000);
+      for (const char of query) {
+        await page.keyboard.type(char, { delay: Math.floor(Math.random() * 120) + 60 });
+      }
+      await randomDelay(1000, 2000);
+      const retryBtn = await page.$('button.search-btn, button[type="submit"], .search-submit, button.HeaderSearchForm__button');
+      if (retryBtn) {
+        await retryBtn.click();
+      } else {
+        await page.keyboard.press("Enter");
+      }
+      await randomDelay(3000, 5000);
+      await naturalScroll(page, 3);
+      await page.keyboard.press("Home");
+      await randomDelay(1000, 2000);
+      await takeScreenshot(page, "04-search-result-retry");
+
+      const retryText = await page.evaluate(() => document.body.innerText.slice(0, 500));
+      if (retryText.includes("Access Denied") || retryText.includes("접근이 거부")) {
+        console.log(chalk.red("   재시도에도 Access Denied. 스크린샷을 확인하세요."));
+        return { results: [], page };
+      }
+    } else {
+      console.log(chalk.red("   Access Denied 후 검색창을 찾을 수 없습니다."));
+      return { results: [], page };
+    }
+  }
+
+  // 검색 결과 파싱 (여러 셀렉터 시도)
   const results = await page.evaluate(() => {
-    const items = document.querySelectorAll('li[class*="ProductUnit"]');
+    // ProductUnit 기반 (현재 쿠팡 구조)
+    let items = document.querySelectorAll('li[class*="ProductUnit"]');
+    // fallback: search-product 기반
+    if (items.length === 0) {
+      items = document.querySelectorAll('li.search-product, li[class*="search-product"]');
+    }
+    // fallback: baby-product-wrap 기반
+    if (items.length === 0) {
+      items = document.querySelectorAll('li.baby-product-wrap, li[class*="baby-product"]');
+    }
     const parsed: Array<{
       name: string;
       price: string;
@@ -141,30 +271,50 @@ async function searchProducts(initialPage: Page, query: string, context: Browser
     items.forEach((item, i) => {
       if (i >= 20) return;
 
-      // 상품명
-      const nameEl = item.querySelector('[class*="productName"]');
-      // 판매가 (할인된 가격)
-      const priceEl = item.querySelector('[class*="priceArea"] span');
-      // 링크
-      const linkEl = item.querySelector("a[href*='/vp/products/']");
+      // 상품명 (여러 셀렉터 시도)
+      const nameEl = item.querySelector(
+        '[class*="productName"], .name, .descriptions .name, dt.name, .title'
+      );
+      // 링크 (여러 패턴)
+      const linkEl = item.querySelector(
+        "a[href*='/vp/products/'], a[href*='/vp/'], a.baby-product-link"
+      );
       // 로켓배송 배지
-      const rocketEl = item.querySelector('[data-badge-id="ROCKET"], [data-badge-id="ROCKET_MERCHANT"]');
+      const rocketEl = item.querySelector(
+        '[data-badge-id="ROCKET"], [data-badge-id="ROCKET_MERCHANT"], .badge.rocket'
+      );
 
       const name = nameEl?.textContent?.trim();
-      const url = linkEl?.getAttribute("href");
+      // 링크가 없으면 item 자체나 상위 a 태그에서 찾기
+      let url = linkEl?.getAttribute("href");
+      if (!url) {
+        const parentLink = item.querySelector("a[href]");
+        const href = parentLink?.getAttribute("href") ?? "";
+        if (href.includes("coupang.com") || href.startsWith("/vp/")) {
+          url = href;
+        }
+      }
       if (!name || !url) return;
 
-      // 가격 추출: "24,150원" 형태
-      const priceArea = item.querySelector('[class*="priceArea"]');
+      // 가격 추출 (여러 셀렉터)
+      const priceArea = item.querySelector(
+        '[class*="priceArea"], .price-area, .price, .price-value, em.sale'
+      );
       let price = "(가격 정보 없음)";
       if (priceArea) {
-        const priceSpans = priceArea.querySelectorAll("span");
+        const priceSpans = priceArea.querySelectorAll("span, em, strong");
         for (const span of Array.from(priceSpans)) {
           const text = span.textContent?.trim() ?? "";
-          if (text.includes("원") && text.match(/[\d,]+원/)) {
-            price = text;
+          if (text.match(/[\d,]+원?/) && text.length < 20) {
+            price = text.includes("원") ? text : text + "원";
             break;
           }
+        }
+        // fallback: priceArea 자체 텍스트
+        if (price === "(가격 정보 없음)") {
+          const areaText = priceArea.textContent?.trim() ?? "";
+          const priceMatch = areaText.match(/([\d,]+)원/);
+          if (priceMatch) price = priceMatch[0];
         }
       }
 
@@ -375,8 +525,6 @@ async function handlePinKeypad(page: Page, pin: string): Promise<boolean> {
     }
   } catch { /* ignore */ }
 
-  // 각 키 스크린샷 캡쳐
-  const screenshotDir = path.join(getSessionDir(), "screenshots");
   const padKeys = targetFrame.locator("a.pad-key");
   const keyCount = await padKeys.count();
   console.log(chalk.gray(`   키패드 키 수: ${keyCount}`));
@@ -387,7 +535,8 @@ async function handlePinKeypad(page: Page, pin: string): Promise<boolean> {
     return false;
   }
 
-  // 각 키 스크린샷 저장
+  // 각 키 스크린샷 저장 (이미지 기반 인식 필요 — DOM 텍스트는 실제 표시와 다름)
+  const screenshotDir = path.join(getSessionDir(), "screenshots");
   for (let i = 0; i < keyCount; i++) {
     try {
       const buf = await padKeys.nth(i).screenshot();
@@ -395,21 +544,16 @@ async function handlePinKeypad(page: Page, pin: string): Promise<boolean> {
     } catch { /* ignore */ }
   }
 
-  // 기존 매핑 파일 삭제 (이전 세션 것이므로)
   const mappingPath = path.join(getSessionDir(), "keypad-mapping.json");
-  if (fs.existsSync(mappingPath)) {
-    fs.unlinkSync(mappingPath);
-  }
-
-  // "ready" 시그널 파일 생성 → 외부에서 스크린샷 확인 후 매핑 작성 대기
+  if (fs.existsSync(mappingPath)) fs.unlinkSync(mappingPath);
   const readyPath = path.join(getSessionDir(), "keypad-ready");
   fs.writeFileSync(readyPath, new Date().toISOString());
   console.log(chalk.yellow("   ⏳ 키패드 스크린샷 저장 완료. keypad-mapping.json 대기 중..."));
   console.log(chalk.gray(`   스크린샷: ${screenshotDir}/pad-key-*.png`));
 
-  // 매핑 파일이 생길 때까지 폴링 (최대 120초)
+  // 매핑 파일이 생길 때까지 폴링 (최대 180초)
   let mapping: Record<string, string> | null = null;
-  for (let wait = 0; wait < 120; wait++) {
+  for (let wait = 0; wait < 180; wait++) {
     await new Promise(r => setTimeout(r, 1000));
     if (fs.existsSync(mappingPath)) {
       try {
@@ -419,16 +563,14 @@ async function handlePinKeypad(page: Page, pin: string): Promise<boolean> {
       } catch { /* still waiting */ }
     }
   }
-
-  // ready 시그널 삭제
   if (fs.existsSync(readyPath)) fs.unlinkSync(readyPath);
 
   if (!mapping) {
-    console.log(chalk.red("   ⏰ 매핑 대기 시간 초과 (120초)"));
+    console.log(chalk.red("   ⏰ 매핑 대기 시간 초과 (180초)"));
     return false;
   }
 
-  console.log(chalk.green("   ✅ 매핑 파일 수신!"));
+  console.log(chalk.green(`   ✅ 매핑 파일 수신! (${Object.keys(mapping).length}개)`));
 
   // 역매핑: 숫자 → 키인덱스
   const digitToKey: Record<string, number> = {};

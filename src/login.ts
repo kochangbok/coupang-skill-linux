@@ -70,12 +70,29 @@ export async function login(): Promise<void> {
 
   // 항상 브라우저 UI 표시 (headless: false)
   await withBrowser(async (page: Page, context: BrowserContext) => {
-    // 간접 접근: 네이버 경유
+    // 네이버 → "쿠팡" 검색 → 쿠팡 링크 클릭 → 로그인 페이지 이동
     await page.goto("https://www.naver.com/", { waitUntil: "domcontentloaded" });
     await randomDelay(1000, 2000);
+    const searchInput = await page.$('input#query, input[name="query"]');
+    if (searchInput) {
+      await searchInput.click();
+      await randomDelay(300, 600);
+      await searchInput.fill("쿠팡");
+      await randomDelay(300, 500);
+      await page.keyboard.press("Enter");
+      await randomDelay(2000, 3000);
+
+      // 네이버 검색 결과에서 쿠팡 링크 클릭
+      const coupangLink = await page.$('a[href*="coupang.com"]');
+      if (coupangLink) {
+        await coupangLink.click();
+        await randomDelay(2000, 3000);
+      }
+    }
+    // 쿠팡 로그인 페이지로 이동
     await page.goto(COUPANG_LOGIN_URL, {
       waitUntil: "domcontentloaded",
-      referer: "https://www.naver.com/",
+      referer: "https://www.coupang.com/",
     });
 
     let loggedIn = false;
