@@ -94,7 +94,7 @@ async function buyNow(page: Page, context: BrowserContext): Promise<void> {
     {
       type: "confirm",
       name: "confirm",
-      message: chalk.red("정말 구매하시겠습니까? 결제가 진행됩니다."),
+      message: chalk.red("정말 구매하시겠습니까? 결제 페이지로 이동합니다."),
       default: false,
     },
   ]);
@@ -110,39 +110,175 @@ async function buyNow(page: Page, context: BrowserContext): Promise<void> {
     const buyBtn = await page.$(
       'button.prod-btn-buy, button[class*="buy-now"], .prod-buy-btn button',
     );
-    if (buyBtn) {
-      await buyBtn.click();
-      spinner.text = "결제 페이지 로딩 중...";
-
-      // 결제 페이지로 이동 대기
-      await page.waitForURL((url) => url.toString().includes("order") || url.toString().includes("checkout"), {
-        timeout: 15_000,
-      }).catch(() => {});
-
-      await saveSession(context);
-      spinner.succeed("결제 페이지로 이동했습니다.");
-      console.log(
-        chalk.yellow(
-          "\n⚠️  결제는 브라우저에서 직접 완료해주세요.",
-        ),
-      );
-      console.log(
-        chalk.gray(
-          "   보안을 위해 최종 결제는 자동화하지 않습니다.\n",
-        ),
-      );
-
-      // 결제 완료 또는 사용자 종료까지 대기
-      console.log(chalk.gray("   결제가 완료되면 Enter를 눌러주세요..."));
-      await new Promise<void>((resolve) => {
-        process.stdin.once("data", () => resolve());
-      });
-    } else {
+    if (!buyBtn) {
       spinner.fail("구매 버튼을 찾을 수 없습니다.");
+      return;
     }
+
+    await buyBtn.click();
+    spinner.text = "결제 페이지 로딩 중...";
+
+    // 결제 페이지(주문서)로 이동 대기
+    await page
+      .waitForURL(
+        (url) =>
+          url.toString().includes("order") ||
+          url.toString().includes("checkout"),
+        { timeout: 15_000 },
+      )
+      .catch(() => {});
+
+    await saveSession(context);
+    spinner.succeed("결제 페이지로 이동했습니다.");
+
+    // 주문서 정보 표시
+    await displayCheckoutSummary(page);
+
+    // 최종 결제 확인
+    await proceedPayment(page, context);
   } catch {
     spinner.fail("구매 진행 중 오류가 발생했습니다.");
   }
+}
+
+async function displayCheckoutSummary(page: Page): Promise<void> {
+  // 주문서에서 정보 추출
+  const summary = await page.evaluate(() => {
+    const getText = (sel: string) =>
+      document.querySelector(sel)?.textContent?.trim() ?? null;
+
+    // 배송지
+    const address =
+      getText(".address-info, .shipping-address, [class*='address']") ?? "(배송지 정보 없음)";
+    // 총 결제금액
+    const totalPrice =
+      getText(".total-payment-price, .total_price, [class*='totalPrice'], [class*='total-price'] strong") ??
+      "(결제 금액 정보 없음)";
+    // 상품명
+    const productName =
+      getText(".product-name, .order-item-name, [class*='productName']") ?? "(상품 정보 없음)";
+    // 결제수단
+    const paymentMethod =
+      getText(".payment-method-selected, [class*='paymentMethod'] .selected, .pay-method .on") ?? null;
+
+    return { address, totalPrice, productName, paymentMethod };
+  });
+
+  console.log(chalk.blue("\n========== 주문 요약 =========="));
+  console.log(`  상품: ${chalk.bold(summary.productName)}`);
+  console.log(`  배송지: ${chalk.white(summary.address)}`);
+  console.log(`  결제금액: ${chalk.green.bold(summary.totalPrice)}`);
+  if (summary.paymentMethod) {
+    console.log(`  결제수단: ${chalk.white(summary.paymentMethod)}`);
+  }
+  console.log(chalk.blue("================================\n"));
+}
+
+async function proceedPayment(page: Page, context: BrowserContext): Promise<void> {
+  const { finalConfirm } = await inquirer.prompt<{ finalConfirm: boolean }>([
+    {
+      type: "confirm",
+      name: "finalConfirm",
+      message: chalk.red.bold("위 내용으로 결제를 진행하시겠습니까?"),
+      default: false,
+    },
+  ]);
+
+  if (!finalConfirm) {
+    console.log(chalk.gray("결제가 취소되었습니다.\n"));
+    return;
+  }
+
+  const spinner = ora("결제 진행 중...").start();
+
+  try {
+    // 결제하기 버튼 클릭
+    const payBtn = await page.$(
+      'button[class*="submit"], button[class*="payment"], .order-submit-btn, ' +
+      'button:has-text("결제하기"), button:has-text("주문하기"), ' +
+      'a[class*="submit"], .btn-payment',
+    );
+
+    if (!payBtn) {
+      spinner.fail("결제 버튼을 찾을 수 없습니다. 브라우저에서 직접 결제해주세요.");
+      console.log(chalk.gray("  결제가 완료되면 Enter를 눌러주세요..."));
+      await waitForEnter();
+      return;
+    }
+
+    await payBtn.click();
+    spinner.text = "결제 처리 대기 중...";
+
+    // 결제 팝업/카드사 인증 등 처리 대기
+    // 결제 완료 페이지 또는 인증 팝업 감지
+    const result = await Promise.race([
+      // 결제 완료 페이지 감지
+      page
+        .waitForURL(
+          (url) => {
+            const u = url.toString();
+            return u.includes("orderComplete") || u.includes("success") || u.includes("done");
+          },
+          { timeout: 120_000 },
+        )
+        .then(() => "completed" as const),
+      // 결제 인증 팝업 대기 (카드사 등)
+      page
+        .waitForEvent("popup", { timeout: 30_000 })
+        .then(() => "popup" as const)
+        .catch(() => "no_popup" as const),
+    ]);
+
+    if (result === "popup") {
+      spinner.info("카드사 인증 팝업이 열렸습니다.");
+      console.log(chalk.yellow("  인증을 완료해주세요. 완료 후 자동으로 진행됩니다.\n"));
+
+      // 인증 완료 후 결제 완료 페이지 대기
+      await page
+        .waitForURL(
+          (url) => {
+            const u = url.toString();
+            return u.includes("orderComplete") || u.includes("success") || u.includes("done");
+          },
+          { timeout: 120_000 },
+        )
+        .catch(() => {});
+    }
+
+    await saveSession(context);
+
+    // 결제 완료 확인
+    const currentUrl = page.url();
+    if (currentUrl.includes("Complete") || currentUrl.includes("success") || currentUrl.includes("done")) {
+      spinner.succeed(chalk.green.bold("결제가 완료되었습니다!"));
+
+      // 주문번호 추출 시도
+      const orderNumber = await page
+        .evaluate(() => {
+          const el = document.querySelector(
+            '[class*="orderNumber"], [class*="order-number"], .order-id',
+          );
+          return el?.textContent?.trim() ?? null;
+        })
+        .catch(() => null);
+
+      if (orderNumber) {
+        console.log(chalk.green(`  주문번호: ${orderNumber}\n`));
+      }
+    } else {
+      spinner.warn("결제 결과를 확인할 수 없습니다.");
+      console.log(chalk.yellow("  쿠팡 앱이나 웹사이트에서 주문 내역을 확인해주세요.\n"));
+    }
+  } catch {
+    spinner.fail("결제 진행 중 오류가 발생했습니다.");
+    console.log(chalk.yellow("  쿠팡에서 주문 상태를 확인해주세요.\n"));
+  }
+}
+
+function waitForEnter(): Promise<void> {
+  return new Promise<void>((resolve) => {
+    process.stdin.once("data", () => resolve());
+  });
 }
 
 export async function orderFromSearch(productUrl: string): Promise<void> {
