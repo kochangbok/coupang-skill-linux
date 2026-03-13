@@ -4,7 +4,39 @@ Playwright 브라우저 자동화로 쿠팡에서 **검색, 장바구니, 주문
 
 실제 Chrome 브라우저를 CDP(Chrome DevTools Protocol)로 제어합니다.
 
-## 설치
+## 사용 방법 1: Claude Code Skill (추천)
+
+Claude Code에서 스킬로 설치하면 자연어로 쿠팡 쇼핑을 할 수 있습니다.
+
+### 스킬 설치
+
+```bash
+npx skills add Zimins/coupang-cli
+```
+
+### 사용 예시
+
+Claude Code에서 자연어로 요청하면 됩니다:
+
+```
+쿠팡에서 펩시 제로 500ml 24개 주문해줘
+쿠팡에서 무선 키보드 검색해줘
+장바구니에 두루마리 휴지 담아줘
+```
+
+또는 슬래시 커맨드로 직접 호출:
+
+```
+/coupang-shopping 생수 2L 12개 주문해줘
+```
+
+> 스킬이 내부적으로 cpcli CLI를 호출하므로, 아래 초기 설정(계정 정보 등록)은 동일하게 필요합니다.
+
+---
+
+## 사용 방법 2: CLI 직접 사용
+
+### 설치
 
 ```bash
 npm install -g cpcli
@@ -32,7 +64,7 @@ npx cpcli <command>
 }
 ```
 
-- `paymentPin`: 쿠페이 결제 비밀번호 (6자리)
+- `paymentPin`: 쿠페이 결제 비밀번호 (6자리) — **결제 시 필수**. 없으면 결제 단계에서 실패합니다.
 
 ### 2. 로그인
 
@@ -93,25 +125,6 @@ cpcli status
 cpcli logout
 ```
 
-## 결제 PIN 키패드
-
-쿠팡은 결제 시 랜덤 배치 PIN 키패드를 사용합니다. cpcli는 다음 방식으로 처리합니다:
-
-1. 각 키패드 버튼을 스크린샷으로 캡쳐 (`~/.coupang-session/screenshots/pad-key-*.png`)
-2. `~/.coupang-session/keypad-ready` 시그널 파일 생성
-3. 외부에서 스크린샷을 읽고 `~/.coupang-session/keypad-mapping.json` 작성 대기 (최대 120초)
-4. 매핑 파일이 생기면 자동으로 PIN 입력 완료
-
-**매핑 파일 형식** (`keypad-mapping.json`):
-
-```json
-{"0":"3","1":"7","2":"5","3":"1","4":"9","5":"0","6":"8","7":"4","8":"2","9":"6"}
-```
-
-키: 버튼 인덱스 (0~9), 값: 해당 버튼에 표시된 숫자.
-
-> Claude Code의 이미지 인식 기능과 연동하면 완전 자동 결제가 가능합니다.
-
 ## 동작 방식
 
 ```
@@ -124,7 +137,7 @@ cpcli order-now "상품명"
   ├─ 바로구매 → 주문서 페이지
   ├─ 결제 수단 선택 (쿠페이 머니 / 신용카드)
   ├─ 결제하기 클릭
-  ├─ PIN 키패드 처리 (스크린샷 → 매핑 → 자동 입력)
+  ├─ PIN 입력
   └─ 주문 완료 확인
 ```
 
@@ -135,10 +148,7 @@ cpcli order-now "상품명"
 ├── credentials.json          # 계정 정보
 ├── storage-state.json        # 브라우저 세션
 ├── chrome-user-data/         # Chrome 사용자 데이터
-├── keypad-mapping.json       # PIN 키패드 매핑 (런타임)
-├── keypad-ready              # 키패드 준비 시그널 (런타임)
 └── screenshots/              # 디버깅용 스크린샷
-    ├── pad-key-0.png ~ 9.png # PIN 키패드 버튼
     └── order-*.png           # 주문 과정 스크린샷
 ```
 
