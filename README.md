@@ -4,19 +4,19 @@ Playwright 브라우저 자동화로 쿠팡에서 **검색, 장바구니, 주문
 
 실제 Chrome 브라우저를 CDP(Chrome DevTools Protocol)로 제어합니다.
 
-## 사용 방법 1: Claude Code Skill (추천)
+## 사용 방법 1: AI Agent Skill (추천)
 
-Claude Code에서 스킬로 설치하면 자연어로 쿠팡 쇼핑을 할 수 있습니다.
+AI 코딩 에이전트에서 스킬로 설치하면 자연어로 쿠팡 쇼핑을 할 수 있습니다.
 
 ### 스킬 설치
 
 ```bash
-npx skills add Zimins/coupang-cli
+npx skills add coupang-shopping
 ```
 
 ### 사용 예시
 
-Claude Code에서 자연어로 요청하면 됩니다:
+AI 에이전트에서 자연어로 요청하면 됩니다:
 
 ```
 쿠팡에서 펩시 제로 500ml 24개 주문해줘
@@ -39,13 +39,13 @@ Claude Code에서 자연어로 요청하면 됩니다:
 ### 설치
 
 ```bash
-npm install -g cpcli
+npm install -g coupang-cli
 ```
 
 또는 설치 없이 바로 실행:
 
 ```bash
-npx cpcli <command>
+npx coupang-cli <command>
 ```
 
 > **요구사항**: Node.js 18+, macOS (Chrome 설치 필요)

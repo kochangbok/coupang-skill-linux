@@ -1,5 +1,5 @@
 {
-  "name": "cpcli",
+  "name": "coupang-cli",
   "version": "1.0.0",
   "description": "Playwright 기반 쿠팡 쇼핑 자동화 CLI — 검색, 장바구니, 주문/결제를 터미널에서",
   "type": "module",

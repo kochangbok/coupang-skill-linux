@@ -1,3 +1,8 @@
+---
+name: coupang-shopping
+description: 쿠팡에서 상품 검색, 장바구니, 주문/결제를 CLI로 자동화. 사용 시점: (1) 사용자가 쿠팡에서 물건 사달라고 할 때, (2) 쿠팡 검색, (3) 쿠팡 장바구니 확인, (4) 쿠팡 주문/결제, (5) '쿠팡', 'coupang', '물건 사줘', '주문해줘', '장바구니' 키워드 언급 시.
+---
+
 # coupang-shopping
 
 쿠팡에서 상품 검색, 장바구니 담기, 주문/결제를 자동화하는 스킬.
@@ -15,13 +20,13 @@
 ### 1. cpcli 설치 확인
 
 ```bash
-npx cpcli --version
+npx coupang-cli --version
 ```
 
 설치가 안 되어 있으면 사용자에게 안내합니다:
 
 ```bash
-npm install -g cpcli
+npm install -g coupang-cli
 ```
 
 ### 2. 계정 정보 확인
@@ -42,10 +47,10 @@ npm install -g cpcli
 ### 3. 로그인
 
 ```bash
-npx cpcli login
+npx coupang-cli login
 ```
 
-- 로그인 상태는 `npx cpcli status`로 확인할 수 있습니다.
+- 로그인 상태는 `npx coupang-cli status`로 확인할 수 있습니다.
 
 ## Instructions
 
@@ -54,14 +59,14 @@ npx cpcli login
 ### 상품 검색
 
 ```bash
-npx cpcli search "검색어"
+npx coupang-cli search "검색어"
 ```
 
 ### 장바구니 담기
 
 ```bash
-npx cpcli cart-add "상품명"
-npx cpcli cart-add "상품명" -n 2  # 2번째 검색 결과 선택
+npx coupang-cli cart-add "상품명"
+npx coupang-cli cart-add "상품명" -n 2  # 2번째 검색 결과 선택
 ```
 
 완료 시: "장바구니에 [상품명] 담았습니다" 라고 알려줍니다.
@@ -69,10 +74,10 @@ npx cpcli cart-add "상품명" -n 2  # 2번째 검색 결과 선택
 ### 바로 주문
 
 ```bash
-npx cpcli order-now "상품명"                  # 1번 상품, 쿠페이 머니
-npx cpcli order-now "상품명" -p card          # 신용/체크카드
-npx cpcli order-now "상품명" -n 3             # 3번째 검색 결과
-npx cpcli order-now "상품명" -n 2 -p card     # 2번 상품, 카드 결제
+npx coupang-cli order-now "상품명"                  # 1번 상품, 쿠페이 머니
+npx coupang-cli order-now "상품명" -p card          # 신용/체크카드
+npx coupang-cli order-now "상품명" -n 3             # 3번째 검색 결과
+npx coupang-cli order-now "상품명" -n 2 -p card     # 2번 상품, 카드 결제
 ```
 
 완료 시: "주문 완료! [상품명] 결제되었습니다" 라고 알려줍니다.
@@ -81,13 +86,13 @@ npx cpcli order-now "상품명" -n 2 -p card     # 2번 상품, 카드 결제
 ### 장바구니 조회
 
 ```bash
-npx cpcli cart
+npx coupang-cli cart
 ```
 
 ### URL로 직접 주문
 
 ```bash
-npx cpcli order "https://www.coupang.com/vp/products/..."
+npx coupang-cli order "https://www.coupang.com/vp/products/..."
 ```
 
 ## Options
