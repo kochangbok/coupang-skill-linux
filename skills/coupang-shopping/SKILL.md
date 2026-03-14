@@ -23,20 +23,34 @@ description: "쿠팡에서 상품 검색, 장바구니, 주문/결제를 CLI로 
 npx coupang-cli --version
 ```
 
-### 2. 계정 정보 확인
+### 2. 계정 정보 확인 (자동 생성)
 
-`~/.coupang-session/credentials.json` 파일이 있어야 합니다:
+`~/.coupang-session/credentials.json` 파일이 있어야 합니다.
+
+**파일이 없으면 에이전트가 직접 템플릿을 생성하고 사용자에게 안내합니다:**
+
+1. `~/.coupang-session/` 디렉토리가 없으면 생성
+2. 아래 템플릿으로 `~/.coupang-session/credentials.json` 파일 작성:
 
 ```json
 {
-  "email": "your@email.com",
-  "password": "your-password",
-  "paymentPin": "123456"
+  "email": "여기에_쿠팡_이메일_입력",
+  "password": "여기에_비밀번호_입력",
+  "paymentPin": "000000"
 }
 ```
 
-- `paymentPin`은 쿠페이 결제 비밀번호 (6자리)로, 결제 시 필수입니다.
-- 파일이 없으면 사용자에게 생성을 안내하세요.
+3. 사용자에게 다음과 같이 안내:
+
+> `~/.coupang-session/credentials.json` 파일을 생성했습니다.
+> 쿠팡 계정 정보를 입력해주세요:
+> - `email`: 쿠팡 로그인 이메일
+> - `password`: 쿠팡 비밀번호
+> - `paymentPin`: 쿠페이 결제 비밀번호 (6자리)
+>
+> 파일 위치: `~/.coupang-session/credentials.json`
+
+4. 사용자가 정보를 입력했다고 확인할 때까지 다음 단계로 진행하지 않음
 
 ### 3. 로그인
 
