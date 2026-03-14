@@ -1,5 +1,6 @@
 import type { Page, BrowserContext } from "playwright";
 import { withBrowser, randomDelay, takeScreenshot, naturalScroll, saveSession, getSessionDir } from "./browser.js";
+import { recognizeKeypadMapping } from "./keypad-ocr.js";
 import chalk from "chalk";
 import ora from "ora";
 import inquirer from "inquirer";
@@ -544,33 +545,41 @@ async function handlePinKeypad(page: Page, pin: string): Promise<boolean> {
     } catch { /* ignore */ }
   }
 
-  const mappingPath = path.join(getSessionDir(), "keypad-mapping.json");
-  if (fs.existsSync(mappingPath)) fs.unlinkSync(mappingPath);
-  const readyPath = path.join(getSessionDir(), "keypad-ready");
-  fs.writeFileSync(readyPath, new Date().toISOString());
-  console.log(chalk.yellow("   ⏳ 키패드 스크린샷 저장 완료. keypad-mapping.json 대기 중..."));
-  console.log(chalk.gray(`   스크린샷: ${screenshotDir}/pad-key-*.png`));
+  // 1차: 알고리즘 OCR로 자체 인식 시도
+  console.log(chalk.gray("   🔍 알고리즘 OCR로 키패드 인식 시도..."));
+  let mapping = recognizeKeypadMapping(screenshotDir);
 
-  // 매핑 파일이 생길 때까지 폴링 (최대 180초)
-  let mapping: Record<string, string> | null = null;
-  for (let wait = 0; wait < 180; wait++) {
-    await new Promise(r => setTimeout(r, 1000));
-    if (fs.existsSync(mappingPath)) {
-      try {
-        mapping = JSON.parse(fs.readFileSync(mappingPath, "utf-8"));
-        if (mapping && Object.keys(mapping).length >= 10) break;
-        mapping = null;
-      } catch { /* still waiting */ }
+  if (mapping) {
+    console.log(chalk.green(`   ✅ OCR 자체 인식 성공! (${Object.keys(mapping).length}개)`));
+  } else {
+    // 2차: 에이전트 대기 (fallback)
+    console.log(chalk.yellow("   ⚠ OCR 인식 실패. 에이전트 키패드 판독 대기로 전환..."));
+    const mappingPath = path.join(getSessionDir(), "keypad-mapping.json");
+    if (fs.existsSync(mappingPath)) fs.unlinkSync(mappingPath);
+    const readyPath = path.join(getSessionDir(), "keypad-ready");
+    fs.writeFileSync(readyPath, new Date().toISOString());
+    console.log(chalk.yellow("   ⏳ 키패드 스크린샷 저장 완료. keypad-mapping.json 대기 중..."));
+    console.log(chalk.gray(`   스크린샷: ${screenshotDir}/pad-key-*.png`));
+
+    for (let wait = 0; wait < 180; wait++) {
+      await new Promise(r => setTimeout(r, 1000));
+      if (fs.existsSync(mappingPath)) {
+        try {
+          mapping = JSON.parse(fs.readFileSync(mappingPath, "utf-8"));
+          if (mapping && Object.keys(mapping).length >= 10) break;
+          mapping = null;
+        } catch { /* still waiting */ }
+      }
     }
+    if (fs.existsSync(readyPath)) fs.unlinkSync(readyPath);
   }
-  if (fs.existsSync(readyPath)) fs.unlinkSync(readyPath);
 
   if (!mapping) {
     console.log(chalk.red("   ⏰ 매핑 대기 시간 초과 (180초)"));
     return false;
   }
 
-  console.log(chalk.green(`   ✅ 매핑 파일 수신! (${Object.keys(mapping).length}개)`));
+  console.log(chalk.green(`   ✅ 키패드 매핑 확정! (${Object.keys(mapping).length}개)`));
 
   // 역매핑: 숫자 → 키인덱스
   const digitToKey: Record<string, number> = {};
