@@ -17,11 +17,25 @@ description: "쿠팡에서 상품 검색, 장바구니, 주문/결제를 CLI로 
 
 이 스킬을 사용하려면 `coupang-cli`가 설치되어 있어야 합니다.
 
-### 1. 설치 확인
+### 1. 설치 및 브라우저 확인
 
 ```bash
 npx coupang-cli --version
 ```
+
+브라우저 확인 (기본: Firefox, Chrome도 가능):
+
+```bash
+# Firefox 설치 확인
+ls "/Applications/Firefox.app" 2>/dev/null && echo "Firefox OK" || echo "Firefox 미설치"
+
+# Playwright 브라우저 설치 (Firefox 없으면)
+npx playwright install firefox
+```
+
+- 기본 브라우저는 **Firefox** (Akamai WAF 우회에 유리)
+- Chrome 사용 시: `COUPANG_BROWSER=chrome npx coupang-cli ...`
+- Firefox 미설치 시 `npx playwright install firefox`로 설치
 
 ### 2. 계정 정보 확인 (자동 생성)
 

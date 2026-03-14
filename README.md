@@ -2,7 +2,7 @@
 
 Playwright 브라우저 자동화로 쿠팡에서 **검색, 장바구니, 주문/결제**를 터미널에서 처리하는 CLI 도구.
 
-실제 Chrome 브라우저를 CDP(Chrome DevTools Protocol)로 제어합니다.
+기본 브라우저는 **Firefox** (Akamai WAF 우회에 유리). Chrome CDP 모드도 지원합니다.
 
 ## 사용 방법 1: AI Agent Skill (추천)
 
@@ -48,7 +48,7 @@ npm install -g coupang-cli
 npx coupang-cli <command>
 ```
 
-> **요구사항**: Node.js 18+, macOS (Chrome 설치 필요)
+> **요구사항**: Node.js 18+, macOS, Firefox 또는 Chrome 설치
 
 ## 초기 설정
 
@@ -125,19 +125,36 @@ cpcli status
 cpcli logout
 ```
 
+## 브라우저 설정
+
+기본 브라우저는 **Firefox** (Playwright)입니다. 쿠팡의 Akamai WAF 봇 감지를 우회하는 데 유리합니다.
+
+```bash
+# Firefox (기본값)
+cpcli order-now "상품명"
+
+# Chrome CDP 모드로 전환
+COUPANG_BROWSER=chrome cpcli order-now "상품명"
+```
+
+| 브라우저 | 장점 | 단점 |
+|----------|------|------|
+| Firefox (기본) | WAF 우회 안정적, CDP 감지 없음 | Playwright가 자동 설치 |
+| Chrome | 기존 Chrome 세션 재사용 가능 | CDP 감지로 차단 위험 |
+
 ## 동작 방식
 
 ```
 cpcli order-now "상품명"
   │
-  ├─ Chrome 서브프로세스 실행 (CDP 포트 9222)
+  ├─ 네이버 경유 쿠팡 진입 (referrer 생성)
   ├─ 쿠팡 로그인
   ├─ 쿠팡 검색 → 상품 선택
   ├─ 검색 결과에서 상품 링크 클릭
   ├─ 바로구매 → 주문서 페이지
   ├─ 결제 수단 선택 (쿠페이 머니 / 신용카드)
   ├─ 결제하기 클릭
-  ├─ PIN 입력
+  ├─ PIN 키패드 자동 인식 (알고리즘 OCR)
   └─ 주문 완료 확인
 ```
 
@@ -146,17 +163,20 @@ cpcli order-now "상품명"
 ```
 ~/.coupang-session/
 ├── credentials.json          # 계정 정보
-├── storage-state.json        # 브라우저 세션
-├── chrome-user-data/         # Chrome 사용자 데이터
+├── storage-state.json        # 브라우저 세션 (쿠키 등)
+├── firefox-profile/          # Firefox 프로필 데이터
+├── chrome-user-data/         # Chrome 사용자 데이터 (Chrome 모드 시)
 └── screenshots/              # 디버깅용 스크린샷
-    └── order-*.png           # 주문 과정 스크린샷
+    ├── order-*.png           # 주문 과정 스크린샷
+    └── pad-key-*.png         # PIN 키패드 스크린샷 (OCR용)
 ```
 
 ## 주의사항
 
-- **macOS 전용**: Chrome 경로가 macOS 기준으로 하드코딩되어 있습니다
+- **macOS 전용**: 브라우저 경로가 macOS 기준입니다
+- **Firefox 권장**: Chrome CDP 모드는 Akamai WAF에 의해 차단될 수 있습니다
 - **결제 주의**: `order-now` 명령은 확인 없이 바로 결제를 진행합니다
-- **세션 유지**: Chrome은 주문 후에도 계속 실행 상태를 유지합니다
+- **PIN 자동 인식**: 키패드 숫자를 알고리즘(특징점 OCR)으로 자동 판별합니다. 인식 실패 시 에이전트 fallback
 - **정책 변경**: 쿠팡의 정책에 따라 동작이 변경될 수 있습니다
 
 ## 라이선스
