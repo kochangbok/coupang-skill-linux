@@ -67,65 +67,75 @@ npx coupang-cli login
 
 ## Instructions
 
-### 핵심 아키텍처: CLI 백그라운드 실행 + 에이전트 키패드 판독
+### 실행 방식: 서브에이전트로 백그라운드 실행
 
-주문/결제 시 쿠팡 PIN 키패드는 **이미지로 렌더링된 랜덤 숫자**를 사용합니다.
-DOM 텍스트와 실제 표시 숫자가 의도적으로 다르므로, **반드시 스크린샷 기반 시각 판독**이 필요합니다.
+**이 스킬의 모든 작업은 Agent 도구를 사용하여 서브에이전트에게 위임합니다.**
+메인 대화를 블로킹하지 않고, 서브에이전트가 CLI 실행 + 키패드 판독 + 결과 보고를 자율적으로 처리합니다.
 
-#### 주문 실행 흐름 (반드시 이 순서를 따를 것)
+#### 서브에이전트 실행 방법
 
-**Step 1: CLI를 백그라운드로 실행**
-
-```bash
-# 백그라운드로 주문 실행 (run_in_background: true)
-npx coupang-cli order-now "상품명" -p card
-```
-
-- 반드시 `run_in_background: true`로 Bash 실행
-- `-p card` (카드결제) 또는 `-p coupay` (쿠페이머니)
-
-**Step 2: 키패드 준비 신호 모니터링**
-
-CLI가 결제 단계에서 PIN 키패드를 만나면:
-1. 각 버튼 스크린샷을 `~/.coupang-session/screenshots/pad-key-{0-9}.png`에 저장
-2. `~/.coupang-session/keypad-ready` 시그널 파일 생성
-3. `~/.coupang-session/keypad-mapping.json` 파일이 생길 때까지 최대 180초 대기
-
-Step 1과 **동시에** 아래 폴링을 실행:
-
-```bash
-# 키패드 준비 신호 대기 (최대 180초)
-for i in $(seq 1 180); do
-  if [ -f ~/.coupang-session/keypad-ready ]; then
-    echo "KEYPAD_READY"; exit 0
-  fi
-  sleep 1
-done
-echo "TIMEOUT"
-```
-
-**Step 3: 키패드 스크린샷 판독 + 매핑 파일 생성**
-
-`KEYPAD_READY` 감지 시, Read 도구로 10개 스크린샷을 **모두 동시에** 읽기:
+스킬이 트리거되면, 메인 에이전트는 아래와 같이 Agent 도구를 호출합니다:
 
 ```
-Read: ~/.coupang-session/screenshots/pad-key-0.png
-Read: ~/.coupang-session/screenshots/pad-key-1.png
-... (pad-key-9.png까지)
+Agent 도구 호출:
+  description: "쿠팡 주문/검색/장바구니"
+  run_in_background: true
+  prompt: |
+    아래 규칙을 반드시 따라 쿠팡 작업을 수행하라.
+
+    ## 규칙
+    - 모든 쿠팡 작업은 CLI 명령(`npx coupang-cli ...`)으로만 실행
+    - 절대 네이버/쿠팡 웹사이트를 직접 방문하거나 브라우저 도구로 조작하지 않는다
+    - 로그인, 네이버 경유 접근은 CLI 내부에서 자동 처리됨
+
+    ## 작업 내용
+    [사용자 요청 내용을 여기에 전달]
+
+    ## 주문 시 키패드 처리 절차
+    1. `rm -f ~/.coupang-session/keypad-ready ~/.coupang-session/keypad-mapping.json`
+    2. CLI를 백그라운드로 실행: `npx coupang-cli order-now "상품명" -p card` (run_in_background: true)
+    3. 동시에 키패드 신호 폴링 실행 (run_in_background: true):
+       `for i in $(seq 1 180); do if [ -f ~/.coupang-session/keypad-ready ]; then echo "KEYPAD_READY"; exit 0; fi; sleep 1; done; echo "TIMEOUT"`
+    4. KEYPAD_READY 감지 시, Read 도구로 10개 스크린샷을 모두 동시에 읽기:
+       ~/.coupang-session/screenshots/pad-key-0.png ~ pad-key-9.png
+    5. 각 이미지에 표시된 숫자를 시각적으로 판독하여 매핑 JSON 작성
+    6. Write 도구로 ~/.coupang-session/keypad-mapping.json 에 저장
+       예: {"0":"9","1":"3","2":"2","3":"4","4":"0","5":"8","6":"5","7":"6","8":"1","9":"7"}
+    7. 키패드가 2회 이상 나올 수 있음 (충전 PIN + 결제 PIN). 각 키패드마다 4-6 반복
+    8. TaskOutput으로 CLI 결과 확인 후 주문 성공/실패 보고
 ```
 
-각 이미지에 표시된 숫자를 시각적으로 판독하여 매핑 JSON 작성:
+#### 서브에이전트 프롬프트 예시
 
-```json
-// 예: pad-key-0에 "9"가 보이고, pad-key-1에 "3"이 보이면:
-{"0":"9","1":"3","2":"2","3":"4","4":"0","5":"8","6":"5","7":"6","8":"1","9":"7"}
+**검색:**
+```
+npx coupang-cli search "검색어" 를 실행하고 결과를 보고하라.
 ```
 
-Write 도구로 `~/.coupang-session/keypad-mapping.json`에 저장하면 CLI가 자동으로 읽어서 PIN 입력.
+**장바구니 담기:**
+```
+npx coupang-cli cart-add "상품명" 을 백그라운드로 실행하고 결과를 보고하라.
+옵션: -n 2 (2번째 검색 결과 선택)
+```
 
-**Step 4: 결과 확인**
+**주문:**
+```
+npx coupang-cli order-now "상품명" -p card 로 주문을 실행하라.
+위의 "주문 시 키패드 처리 절차"를 반드시 따를 것.
+```
 
-백그라운드 CLI의 TaskOutput을 확인하여 주문 성공/실패 보고.
+**장바구니 조회:**
+```
+npx coupang-cli cart 를 실행하고 결과를 보고하라.
+```
+
+### 메인 에이전트의 역할
+
+1. 사용자 요청을 파악 (상품명, 결제수단, 옵션 등)
+2. 주문의 경우 사용자에게 상품명/결제수단 확인
+3. Agent 도구로 서브에이전트 실행 (`run_in_background: true`)
+4. 사용자에게 "실행 중입니다" 안내
+5. 서브에이전트 완료 알림 수신 후 결과를 사용자에게 보고
 
 ### 네이버 경유 쿠팡 이동 (로그인 포함)
 
@@ -136,27 +146,6 @@ npx coupang-cli navigate
 ```
 
 - 에이전트가 직접 네이버/쿠팡을 방문할 필요 없음. 이 명령 하나로 해결.
-
-### 검색만 할 때
-
-검색은 키패드 판독이 필요 없으므로 단순 실행:
-
-```bash
-npx coupang-cli search "검색어"
-```
-
-### 장바구니 담기
-
-```bash
-npx coupang-cli cart-add "상품명"
-npx coupang-cli cart-add "상품명" -n 2  # 2번째 검색 결과 선택
-```
-
-### 장바구니 조회
-
-```bash
-npx coupang-cli cart
-```
 
 ## Options
 
@@ -172,4 +161,4 @@ npx coupang-cli cart
 - macOS 전용 (Chrome/Firefox 설치 필요)
 - 기본 브라우저는 Firefox (Akamai WAF 우회). Chrome 사용 시: `COUPANG_BROWSER=chrome`
 - `order-now`은 확인 없이 바로 결제하므로, 주문 전 사용자에게 상품명/결제 수단 확인 필수
-- 키패드가 2회 이상 나올 수 있음 (충전 PIN + 결제 PIN). 각 키패드마다 위 Step 2-3 반복 필요
+- 키패드가 2회 이상 나올 수 있음 (충전 PIN + 결제 PIN). 각 키패드마다 Step 4-6 반복 필요
