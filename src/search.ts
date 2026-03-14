@@ -93,7 +93,7 @@ async function tryAutoLogin(page: Page, context: BrowserContext): Promise<boolea
   }
 }
 
-async function navigateToCoupangViaSearch(page: Page): Promise<Page> {
+export async function navigateToCoupangViaSearch(page: Page): Promise<Page> {
   // 1. 네이버 이동
   console.log(chalk.gray("   네이버로 이동..."));
   await page.goto("https://www.naver.com/", { waitUntil: "domcontentloaded" });
@@ -938,4 +938,30 @@ export async function searchAndOrder(
   }, false);
 
   return result;
+}
+
+/**
+ * 네이버 → 쿠팡 검색 → 쿠팡 링크 클릭 → 쿠팡 진입
+ * CLI 명령용 wrapper
+ */
+export async function navigateToCoupang(): Promise<void> {
+  console.log(chalk.blue("\n네이버 경유 쿠팡 이동을 시작합니다..."));
+  await withBrowser(async (page, context) => {
+    const coupangPage = await navigateToCoupangViaSearch(page);
+
+    const isLoggedIn = await checkLoginOnPage(coupangPage);
+    if (isLoggedIn) {
+      console.log(chalk.green("   ✅ 로그인 확인됨"));
+    } else {
+      const loginOk = await tryAutoLogin(coupangPage, context);
+      if (loginOk) {
+        console.log(chalk.green("   ✅ 로그인 완료"));
+      } else {
+        console.log(chalk.yellow("   ⚠ 로그인 실패. 수동 로그인이 필요합니다."));
+      }
+    }
+
+    await saveSession(context);
+    console.log(chalk.green("\n✅ 쿠팡 진입 완료!"));
+  }, false);
 }

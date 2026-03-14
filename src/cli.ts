@@ -3,7 +3,7 @@
 import { Command } from "commander";
 import chalk from "chalk";
 import { login, checkLoginStatus } from "./login.js";
-import { search, searchAndAddToCart, searchAndOrder } from "./search.js";
+import { search, searchAndAddToCart, searchAndOrder, navigateToCoupang } from "./search.js";
 import { orderByUrl, orderFromSearch } from "./order.js";
 import { viewCart } from "./cart.js";
 import { clearSession } from "./browser.js";
@@ -129,6 +129,19 @@ program
       }
     } catch (error) {
       console.error(chalk.red("주문 중 오류:"), error);
+      process.exit(1);
+    }
+  });
+
+// 네이버 경유 쿠팡 이동
+program
+  .command("navigate")
+  .description("네이버 검색을 통해 쿠팡에 진입합니다 (referrer 생성 + 로그인)")
+  .action(async () => {
+    try {
+      await navigateToCoupang();
+    } catch (error) {
+      console.error(chalk.red("쿠팡 이동 중 오류:"), error);
       process.exit(1);
     }
   });

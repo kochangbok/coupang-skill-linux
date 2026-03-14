@@ -113,6 +113,16 @@ Write 도구로 `~/.coupang-session/keypad-mapping.json`에 저장하면 CLI가 
 
 백그라운드 CLI의 TaskOutput을 확인하여 주문 성공/실패 보고.
 
+### 네이버 경유 쿠팡 이동 (로그인 포함)
+
+네이버 검색 → 쿠팡 링크 클릭 → 쿠팡 진입 + 로그인까지 CLI가 자동 처리:
+
+```bash
+npx coupang-cli navigate
+```
+
+- 에이전트가 직접 네이버/쿠팡을 방문할 필요 없음. 이 명령 하나로 해결.
+
 ### 검색만 할 때
 
 검색은 키패드 판독이 필요 없으므로 단순 실행:
