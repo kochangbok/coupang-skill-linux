@@ -1,6 +1,7 @@
 ---
 name: coupang-shopping
 description: "쿠팡에서 상품 검색, 장바구니, 주문/결제를 CLI로 자동화. 사용 시점 - (1) 사용자가 쿠팡에서 물건 사달라고 할 때, (2) 쿠팡 검색, (3) 쿠팡 장바구니 확인, (4) 쿠팡 주문/결제, (5) 쿠팡, coupang, 물건 사줘, 주문해줘, 장바구니 키워드 언급 시."
+metadata: {"openclaw":{"emoji":"🛒","homepage":"https://github.com/Zimins/coupang-cli","os":["darwin","linux"]}}
 ---
 
 # coupang-shopping
@@ -22,28 +23,33 @@ description: "쿠팡에서 상품 검색, 장바구니, 주문/결제를 CLI로 
 
 ```bash
 # 설치 확인
-npx coupang-cli --version 2>/dev/null && echo "CLI_OK" || echo "CLI_NOT_FOUND"
+cpcli --version 2>/dev/null && echo "CLI_OK" || echo "CLI_NOT_FOUND"
 ```
 
 `CLI_NOT_FOUND`이면 자동 설치:
 
 ```bash
 npm install -g coupang-cli
+hash -r
 ```
 
 ### 2. 브라우저 확인 및 자동 설치
 
-기본 브라우저는 **Firefox** (Akamai WAF 우회에 유리).
+기본 브라우저는 **macOS에서는 Firefox**, **Linux/OpenClaw에서는 Chromium** 입니다.
 
 ```bash
-# Playwright Firefox 설치 확인 + 없으면 자동 설치
+# Linux/OpenClaw 기본 브라우저용
+npx playwright install chromium
+
+# macOS에서 기본 Firefox 모드까지 함께 쓰려면 추가 설치
 npx playwright install firefox
 ```
 
-- Chrome 사용 시: `COUPANG_BROWSER=chrome npx coupang-cli ...`
-- 보통 Firefox가 권장됨 (Chrome CDP는 봇 감지에 취약)
+- 브라우저 강제 선택: `COUPANG_BROWSER=firefox|chromium|chrome cpcli ...`
+- OpenClaw `exec` 환경에서는 `OPENCLAW_SHELL=exec`가 자동 설정되어 Chromium + headless 모드로 실행됩니다
+- 보통 macOS는 Firefox, Linux/OpenClaw는 Chromium이 가장 안정적입니다
 
-### 2. 계정 정보 확인 (자동 생성)
+### 3. 계정 정보 확인 (자동 생성)
 
 `~/.coupang-session/credentials.json` 파일이 있어야 합니다.
 
@@ -72,17 +78,18 @@ npx playwright install firefox
 
 4. 사용자가 정보를 입력했다고 확인할 때까지 다음 단계로 진행하지 않음
 
-### 3. 로그인
+### 4. 로그인
 
 ```bash
-npx coupang-cli login
+cpcli login
 ```
 
 ## Important: 에이전트는 브라우저를 직접 조작하지 않는다
 
-- **모든 쿠팡 작업(검색, 로그인, 장바구니, 주문)은 반드시 CLI 명령(`npx coupang-cli ...`)으로만 실행**
+- **모든 쿠팡 작업(검색, 로그인, 장바구니, 주문)은 반드시 CLI 명령(`cpcli ...`)으로만 실행**
 - 에이전트가 직접 네이버/쿠팡 웹사이트를 방문하거나, 브라우저 자동화 도구로 조작하면 안 됨
 - 로그인, 네이버 경유 접근 등은 CLI 내부에서 자동으로 처리됨
+- OpenClaw exec 환경에서는 CLI가 headless Chromium으로 자동 전환됨
 - 에이전트의 역할은 오직: (1) CLI 명령 실행, (2) 키패드 이미지 판독, (3) 결과 보고
 
 ## Instructions
@@ -104,7 +111,7 @@ Agent 도구 호출:
     아래 규칙을 반드시 따라 쿠팡 작업을 수행하라.
 
     ## 규칙
-    - 모든 쿠팡 작업은 CLI 명령(`npx coupang-cli ...`)으로만 실행
+    - 모든 쿠팡 작업은 CLI 명령(`cpcli ...`)으로만 실행
     - 절대 네이버/쿠팡 웹사이트를 직접 방문하거나 브라우저 도구로 조작하지 않는다
     - 로그인, 네이버 경유 접근은 CLI 내부에서 자동 처리됨
 
@@ -113,7 +120,7 @@ Agent 도구 호출:
 
     ## 주문 시 키패드 처리 절차
     1. `rm -f ~/.coupang-session/keypad-ready ~/.coupang-session/keypad-mapping.json`
-    2. CLI를 백그라운드로 실행: `npx coupang-cli order-now "상품명" -p card` (run_in_background: true)
+    2. CLI를 백그라운드로 실행: `cpcli order-now "상품명" -p card` (run_in_background: true)
     3. 동시에 키패드 신호 폴링 실행 (run_in_background: true):
        `for i in $(seq 1 180); do if [ -f ~/.coupang-session/keypad-ready ]; then echo "KEYPAD_READY"; exit 0; fi; sleep 1; done; echo "TIMEOUT"`
     4. KEYPAD_READY 감지 시, Read 도구로 10개 스크린샷을 모두 동시에 읽기:
@@ -129,24 +136,24 @@ Agent 도구 호출:
 
 **검색:**
 ```
-npx coupang-cli search "검색어" 를 실행하고 결과를 보고하라.
+cpcli search "검색어" 를 실행하고 결과를 보고하라.
 ```
 
 **장바구니 담기:**
 ```
-npx coupang-cli cart-add "상품명" 을 백그라운드로 실행하고 결과를 보고하라.
+cpcli cart-add "상품명" 을 백그라운드로 실행하고 결과를 보고하라.
 옵션: -n 2 (2번째 검색 결과 선택)
 ```
 
 **주문:**
 ```
-npx coupang-cli order-now "상품명" -p card 로 주문을 실행하라.
+cpcli order-now "상품명" -p card 로 주문을 실행하라.
 위의 "주문 시 키패드 처리 절차"를 반드시 따를 것.
 ```
 
 **장바구니 조회:**
 ```
-npx coupang-cli cart 를 실행하고 결과를 보고하라.
+cpcli cart 를 실행하고 결과를 보고하라.
 ```
 
 ### 메인 에이전트의 역할
@@ -162,7 +169,7 @@ npx coupang-cli cart 를 실행하고 결과를 보고하라.
 네이버 검색 → 쿠팡 링크 클릭 → 쿠팡 진입 + 로그인까지 CLI가 자동 처리:
 
 ```bash
-npx coupang-cli navigate
+cpcli navigate
 ```
 
 - 에이전트가 직접 네이버/쿠팡을 방문할 필요 없음. 이 명령 하나로 해결.
@@ -178,7 +185,7 @@ npx coupang-cli navigate
 
 - **키패드 매핑은 DOM 스크래핑 불가** — 반드시 이미지 판독으로 처리
 - CLI 명령은 시간이 걸리므로 반드시 백그라운드로 실행
-- macOS 전용 (Chrome/Firefox 설치 필요)
-- 기본 브라우저는 Firefox (Akamai WAF 우회). Chrome 사용 시: `COUPANG_BROWSER=chrome`
+- macOS + Linux 지원 (OpenClaw exec는 headless Chromium 자동 전환)
+- 브라우저 강제 선택: `COUPANG_BROWSER=firefox|chromium|chrome`
 - `order-now`은 확인 없이 바로 결제하므로, 주문 전 사용자에게 상품명/결제 수단 확인 필수
 - 키패드가 2회 이상 나올 수 있음 (충전 PIN + 결제 PIN). 각 키패드마다 Step 4-6 반복 필요

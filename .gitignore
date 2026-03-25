@@ -2,3 +2,5 @@ node_modules/
 dist/
 .coupang-session/
 *.tsbuildinfo
+.omx/
+.superset/

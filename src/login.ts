@@ -1,5 +1,5 @@
 import type { Page, BrowserContext } from "playwright";
-import { withBrowser, saveSession, getSessionDir, randomDelay } from "./browser.js";
+import { withBrowser, saveSession, getSessionDir, randomDelay, getBrowserRuntime } from "./browser.js";
 import chalk from "chalk";
 import ora from "ora";
 import path from "node:path";
@@ -67,8 +67,15 @@ export async function login(): Promise<void> {
   console.log(chalk.blue("\n쿠팡 로그인을 시작합니다..."));
 
   const credentials = loadCredentials();
+  const runtime = getBrowserRuntime(false);
+  const sessionDir = getSessionDir();
 
-  // 항상 브라우저 UI 표시 (headless: false)
+  if (runtime.headless && !credentials) {
+    throw new Error(
+      `headless/OpenClaw 환경에서는 수동 로그인 창을 띄울 수 없습니다. ${sessionDir}/credentials.json 을 먼저 채우거나 DISPLAY/COUPANG_HEADLESS=0 환경에서 다시 실행해주세요.`,
+    );
+  }
+
   await withBrowser(async (page: Page, context: BrowserContext) => {
     // 네이버 → "쿠팡" 검색 → 쿠팡 링크 클릭 → 로그인 페이지 이동
     await page.goto("https://www.naver.com/", { waitUntil: "domcontentloaded" });
@@ -106,6 +113,12 @@ export async function login(): Promise<void> {
     }
 
     if (!loggedIn) {
+      if (runtime.headless) {
+        throw new Error(
+          "저장된 계정 정보로 자동 로그인하지 못했습니다. headless/OpenClaw 환경에서는 수동 로그인으로 전환할 수 없으니 credentials.json을 확인하거나 GUI 환경에서 다시 실행해주세요.",
+        );
+      }
+
       loggedIn = await waitForManualLogin(page);
     }
 

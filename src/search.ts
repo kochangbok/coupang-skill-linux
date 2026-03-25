@@ -677,6 +677,8 @@ async function handlePinKeypad(page: Page, pin: string): Promise<boolean> {
 
   // 각 키 스크린샷 저장 (이미지 기반 인식 필요 — DOM 텍스트는 실제 표시와 다름)
   const screenshotDir = path.join(getSessionDir(), "screenshots");
+  fs.mkdirSync(screenshotDir, { recursive: true });
+
   for (let i = 0; i < keyCount; i++) {
     try {
       const buf = await padKeys.nth(i).screenshot();

@@ -2,7 +2,7 @@
 
 Playwright 브라우저 자동화로 쿠팡에서 **검색, 장바구니, 주문/결제**를 터미널에서 처리하는 CLI 도구.
 
-기본 브라우저는 **Firefox** (Akamai WAF 우회에 유리). Chrome CDP 모드도 지원합니다.
+macOS에서는 **Firefox**, Linux/OpenClaw에서는 **Chromium** 을 기본 브라우저로 사용합니다. 필요하면 Chrome CDP 모드도 지원합니다.
 
 ## 사용 방법 1: AI Agent Skill (추천)
 
@@ -48,7 +48,9 @@ npm install -g coupang-cli
 npx coupang-cli <command>
 ```
 
-> **요구사항**: Node.js 18+, macOS, Firefox 또는 Chrome 설치
+> **요구사항**: Node.js 18+, macOS 또는 Linux
+>
+> 기본 브라우저는 Playwright가 설치한 브라우저를 사용합니다. Linux/OpenClaw는 Chromium, macOS는 Firefox가 기본값이며, 시스템 Chrome/Chromium이 있으면 `COUPANG_BROWSER=chrome` 도 사용할 수 있습니다.
 
 ## 초기 설정
 
@@ -73,8 +75,9 @@ cpcli login
 ```
 
 - 저장된 계정 정보가 있으면 자동 로그인 시도
-- 없거나 실패하면 Chrome 브라우저가 열려 수동 로그인
-- 로그인 후 세션이 `~/.coupang-session/`에 저장됨
+- headless/OpenClaw 환경에서는 저장된 계정 정보가 반드시 필요함
+- GUI 환경이면 브라우저가 열려 수동 로그인 가능
+- 로그인 후 세션이 `~/.coupang-session/` 또는 `COUPANG_SESSION_DIR` 경로에 저장됨
 
 ## 명령어
 
@@ -127,20 +130,35 @@ cpcli logout
 
 ## 브라우저 설정
 
-기본 브라우저는 **Firefox** (Playwright)입니다. 쿠팡의 Akamai WAF 봇 감지를 우회하는 데 유리합니다.
+기본값은 환경에 따라 자동 선택됩니다.
 
 ```bash
-# Firefox (기본값)
+# macOS 기본값: Firefox
 cpcli order-now "상품명"
 
-# Chrome CDP 모드로 전환
+# Linux/OpenClaw 기본값: Chromium
+COUPANG_BROWSER=chromium cpcli order-now "상품명"
+
+# 시스템 Chrome/Chromium을 CDP로 재사용
 COUPANG_BROWSER=chrome cpcli order-now "상품명"
+
+# headless 강제 (OpenClaw exec는 자동 headless)
+COUPANG_HEADLESS=1 cpcli search "상품명"
 ```
 
-| 브라우저 | 장점 | 단점 |
-|----------|------|------|
-| Firefox (기본) | WAF 우회 안정적, CDP 감지 없음 | Playwright가 자동 설치 |
-| Chrome | 기존 Chrome 세션 재사용 가능 | CDP 감지로 차단 위험 |
+| 브라우저 | 기본 대상 | 장점 | 단점 |
+|----------|-----------|------|------|
+| Firefox | macOS 기본 | WAF 우회 안정적, CDP 감지 없음 | Playwright Firefox 설치 필요 |
+| Chromium | Linux / OpenClaw 기본 | Playwright 기본 설치와 잘 맞고 headless에 강함 | Firefox보다 WAF 우회 여유가 적을 수 있음 |
+| Chrome CDP | 명시 선택 | 기존 Chrome 세션 재사용 가능 | 시스템 Chrome 경로 필요, 차단 위험 |
+
+### OpenClaw / Linux 팁
+
+- OpenClaw `exec` 툴은 `OPENCLAW_SHELL=exec` 를 설정하므로, cpcli는 자동으로 **Chromium + headless** 조합을 사용합니다.
+- `DISPLAY`/`WAYLAND_DISPLAY` 가 없는 Linux에서는 headless 로 자동 전환됩니다.
+- headless 에서는 수동 로그인 창을 띄울 수 없으므로 `credentials.json` 을 먼저 채워두는 것이 안전합니다.
+- 세션 경로를 분리하고 싶다면 `COUPANG_SESSION_DIR=/path/to/session` 을 사용할 수 있습니다.
+- Chrome CDP 포트 충돌이 나면 `COUPANG_CDP_PORT=9333` 처럼 바꿔 실행하세요.
 
 ## 동작 방식
 
@@ -161,11 +179,10 @@ cpcli order-now "상품명"
 ## 파일 구조
 
 ```
-~/.coupang-session/
+${COUPANG_SESSION_DIR:-~/.coupang-session}/
 ├── credentials.json          # 계정 정보
 ├── storage-state.json        # 브라우저 세션 (쿠키 등)
-├── firefox-profile/          # Firefox 프로필 데이터
-├── chrome-user-data/         # Chrome 사용자 데이터 (Chrome 모드 시)
+├── chrome-user-data/         # Chrome 사용자 데이터 (Chrome CDP 모드 시)
 └── screenshots/              # 디버깅용 스크린샷
     ├── order-*.png           # 주문 과정 스크린샷
     └── pad-key-*.png         # PIN 키패드 스크린샷 (OCR용)
@@ -173,8 +190,8 @@ cpcli order-now "상품명"
 
 ## 주의사항
 
-- **macOS 전용**: 브라우저 경로가 macOS 기준입니다
-- **Firefox 권장**: Chrome CDP 모드는 Akamai WAF에 의해 차단될 수 있습니다
+- **macOS + Linux 지원**: Linux/OpenClaw는 Chromium이 기본값입니다
+- **Firefox 권장 (macOS)**: Chrome CDP 모드는 Akamai WAF에 의해 차단될 수 있습니다
 - **결제 주의**: `order-now` 명령은 확인 없이 바로 결제를 진행합니다
 - **PIN 자동 인식**: 키패드 숫자를 알고리즘(특징점 OCR)으로 자동 판별합니다. 인식 실패 시 에이전트 fallback
 - **정책 변경**: 쿠팡의 정책에 따라 동작이 변경될 수 있습니다
