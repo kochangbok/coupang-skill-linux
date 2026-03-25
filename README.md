@@ -151,6 +151,7 @@ COUPANG_HEADLESS=1 cpcli search "상품명"
 ### OpenClaw / Linux 팁
 
 - OpenClaw에서는 가능하면 `node scripts/cpcli-launcher.mjs ...` 형태의 **단발성 런처 명령**을 사용하세요.
+- 빠른 점검은 `node scripts/openclaw-smoke.mjs` 로 시작하면 됩니다.
 - 이 런처는 local build → PATH의 cpcli → `npm exec --package file:<repo>` 순서로 자동 fallback 합니다.
 - OpenClaw `exec` 환경에서는 자동으로 **Chromium + headless** 조합을 우선 사용합니다.
 - `DISPLAY`/`WAYLAND_DISPLAY` 가 없는 Linux에서는 headless 로 자동 전환됩니다.

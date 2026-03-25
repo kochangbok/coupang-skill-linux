@@ -11,6 +11,7 @@
     "README.md",
     "skills",
     "scripts/cpcli-launcher.mjs",
+    "scripts/openclaw-smoke.mjs",
     "scripts/wait-keypad-ready.mjs",
     "LICENSE",
     "NOTICE"
