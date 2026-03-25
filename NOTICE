@@ -1,0 +1,8 @@
+This repository contains a private adaptation of earlier Coupang automation work.
+
+Attribution
+- Original implementation and prior published package metadata were authored by Zimin.
+- This repository adds private operational changes, Linux/OpenClaw support, CI, and documentation updates maintained by kochangbok.
+
+License
+- Distributed under the MIT License; see LICENSE.

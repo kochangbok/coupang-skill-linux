@@ -1,7 +1,7 @@
 ---
 name: coupang-shopping
 description: "쿠팡에서 상품 검색, 장바구니, 주문/결제를 CLI로 자동화. 사용 시점 - (1) 사용자가 쿠팡에서 물건 사달라고 할 때, (2) 쿠팡 검색, (3) 쿠팡 장바구니 확인, (4) 쿠팡 주문/결제, (5) 쿠팡, coupang, 물건 사줘, 주문해줘, 장바구니 키워드 언급 시."
-metadata: {"openclaw":{"emoji":"🛒","homepage":"https://github.com/Zimins/coupang-cli","os":["darwin","linux"]}}
+metadata: {"openclaw":{"emoji":"🛒","homepage":"https://github.com/kochangbok/coupang-skill-linux","os":["darwin","linux"]}}
 ---
 
 # coupang-shopping
@@ -16,20 +16,23 @@ metadata: {"openclaw":{"emoji":"🛒","homepage":"https://github.com/Zimins/coup
 
 ## Prerequisites
 
-이 스킬을 사용하려면 `coupang-cli`와 브라우저가 설치되어 있어야 합니다.
+이 스킬을 사용하려면 `cpcli`와 브라우저가 준비되어 있어야 합니다.
 **에이전트가 아래 순서대로 Bash로 직접 확인/설치합니다.**
 
-### 1. coupang-cli 설치 확인 및 자동 설치
+### 1. cpcli 설치 확인 및 자동 준비
 
 ```bash
 # 설치 확인
 cpcli --version 2>/dev/null && echo "CLI_OK" || echo "CLI_NOT_FOUND"
 ```
 
-`CLI_NOT_FOUND`이면 자동 설치:
+`CLI_NOT_FOUND`이면 현재 저장소 루트에서 직접 빌드/링크합니다:
 
 ```bash
-npm install -g coupang-cli
+cd {baseDir}/../..
+npm ci
+npm run build
+npm link
 hash -r
 ```
 
