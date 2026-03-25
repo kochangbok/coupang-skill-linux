@@ -419,6 +419,41 @@ async function searchProducts(initialPage, query, context) {
     });
     return { results, page };
 }
+function toFullProductUrl(url) {
+    return url.startsWith("http") ? url : `https://www.coupang.com${url}`;
+}
+function toPriceCheckResult(item, index) {
+    return {
+        ...item,
+        index: index + 1,
+        fullUrl: toFullProductUrl(item.url),
+        displayPrice: item.price.endsWith("원") ? item.price : `${item.price}원`,
+    };
+}
+async function withSuppressedConsoleLogs(fn) {
+    const originalLog = console.log;
+    const originalWarn = console.warn;
+    console.log = () => { };
+    console.warn = () => { };
+    try {
+        return await fn();
+    }
+    finally {
+        console.log = originalLog;
+        console.warn = originalWarn;
+    }
+}
+async function fetchSearchResults(query, options = {}) {
+    const spinner = options.silent ? null : ora(`"${query}" 검색 중...`).start();
+    const { results } = await withBrowser(async (page, context) => {
+        spinner?.stop();
+        if (options.silent) {
+            return withSuppressedConsoleLogs(() => searchProducts(page, query, context));
+        }
+        return searchProducts(page, query, context);
+    }, false);
+    return results;
+}
 function displayResults(results) {
     if (results.length === 0) {
         console.log(chalk.yellow("\n검색 결과가 없습니다.\n"));
@@ -435,11 +470,7 @@ function displayResults(results) {
     });
 }
 export async function search(query) {
-    const spinner = ora(`"${query}" 검색 중...`).start();
-    const { results } = await withBrowser(async (page, context) => {
-        spinner.stop(); // 스크린샷 로그 보이게
-        return searchProducts(page, query, context);
-    }, false);
+    const results = await fetchSearchResults(query);
     displayResults(results);
     if (results.length === 0) {
         console.log(chalk.gray("   스크린샷: ~/.coupang-session/screenshots/ 에서 확인 가능\n"));
@@ -463,6 +494,37 @@ export async function search(query) {
         return undefined;
     }
     return results[selectedIndex - 1];
+}
+function displayPriceCheckResults(results, totalCount) {
+    if (results.length === 0) {
+        console.log(chalk.yellow("\n검색 결과가 없습니다.\n"));
+        return;
+    }
+    console.log(chalk.blue(`\n가격 조회 결과 (${results.length}개 표시 / 전체 ${totalCount}개):\n`));
+    for (const item of results) {
+        const rocket = item.rocketDelivery ? chalk.magenta(" 🚀로켓배송") : "";
+        const rating = item.rating ? chalk.yellow(` ★${item.rating}`) : "";
+        console.log(`  ${chalk.white(`${item.index}.`)} ${chalk.bold(item.name)}`);
+        console.log(`     ${chalk.green(item.displayPrice)}${rocket}${rating}`);
+        console.log(chalk.gray(`     ${item.fullUrl}`));
+        console.log();
+    }
+}
+export async function priceCheck(query, options = {}) {
+    const results = await fetchSearchResults(query, { silent: options.json });
+    const limit = Math.max(1, options.limit ?? 5);
+    const normalized = results.slice(0, limit).map(toPriceCheckResult);
+    if (options.json) {
+        console.log(JSON.stringify({
+            query,
+            totalCount: results.length,
+            shownCount: normalized.length,
+            results: normalized,
+        }, null, 2));
+        return normalized;
+    }
+    displayPriceCheckResults(normalized, results.length);
+    return normalized;
 }
 /**
  * 검색 → 첫 번째 상품 선택 → 장바구니 담기까지 한 세션에서 처리

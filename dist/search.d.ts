@@ -6,8 +6,17 @@ export interface SearchResult {
     rating?: string;
     rocketDelivery: boolean;
 }
+export interface PriceCheckResult extends SearchResult {
+    index: number;
+    fullUrl: string;
+    displayPrice: string;
+}
 export declare function navigateToCoupangViaSearch(page: Page): Promise<Page>;
 export declare function search(query: string): Promise<SearchResult | undefined>;
+export declare function priceCheck(query: string, options?: {
+    limit?: number;
+    json?: boolean;
+}): Promise<PriceCheckResult[]>;
 /**
  * 검색 → 첫 번째 상품 선택 → 장바구니 담기까지 한 세션에서 처리
  * CLI 비인터랙티브 모드용

@@ -3,7 +3,7 @@
 import { Command } from "commander";
 import chalk from "chalk";
 import { login, checkLoginStatus } from "./login.js";
-import { search, searchAndAddToCart, searchAndOrder, navigateToCoupang } from "./search.js";
+import { search, priceCheck, searchAndAddToCart, searchAndOrder, navigateToCoupang } from "./search.js";
 import { orderByUrl, orderFromSearch } from "./order.js";
 import { viewCart } from "./cart.js";
 import { clearSession } from "./browser.js";
@@ -77,6 +77,22 @@ program
       }
     } catch (error) {
       console.error(chalk.red("검색 중 오류:"), error);
+      process.exit(1);
+    }
+  });
+
+// 비인터랙티브 가격 조회
+program
+  .command("price-check <query>")
+  .description("상품 가격/링크를 비인터랙티브로 조회합니다")
+  .option("-n, --limit <number>", "표시할 결과 수 (기본: 5)", "5")
+  .option("--json", "결과를 JSON으로 출력")
+  .action(async (query: string, options: { limit: string; json?: boolean }) => {
+    try {
+      const limit = parseInt(options.limit, 10) || 5;
+      await priceCheck(query, { limit, json: options.json });
+    } catch (error) {
+      console.error(chalk.red("가격 조회 중 오류:"), error);
       process.exit(1);
     }
   });

@@ -90,6 +90,13 @@ cpcli search "무선 키보드"
 cpcli search "무선 키보드" -o
 ```
 
+### 가격만 조회 (비인터랙티브)
+
+```bash
+cpcli price-check "마이노멀 바닐라 아이스크림 파인트"
+cpcli price-check "마이노멀 바닐라 아이스크림 파인트" --json
+```
+
 ### 검색 → 바로 주문
 
 ```bash

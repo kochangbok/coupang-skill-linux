@@ -53,6 +53,6 @@ console.log(`1. ${process.execPath} ${launcherPath} --help`);
 console.log('2. npx playwright install chromium');
 console.log(`3. create ${credentialsPath} if missing`);
 console.log(`4. COUPANG_HEADLESS=1 ${process.execPath} ${launcherPath} status`);
-console.log(`5. COUPANG_HEADLESS=1 ${process.execPath} ${launcherPath} search "마이노멀 바닐라 아이스크림 파인트"`);
+console.log(`5. COUPANG_HEADLESS=1 ${process.execPath} ${launcherPath} price-check --json "마이노멀 바닐라 아이스크림 파인트"`);
 
 process.exit(launcherCheck.status === 0 ? 0 : 1);

@@ -15,6 +15,12 @@ export interface SearchResult {
   rocketDelivery: boolean;
 }
 
+export interface PriceCheckResult extends SearchResult {
+  index: number;
+  fullUrl: string;
+  displayPrice: string;
+}
+
 /** 쿠팡 페이지에서 로그인 여부 확인 */
 async function checkLoginOnPage(page: Page): Promise<boolean> {
   return page.evaluate(() => {
@@ -472,6 +478,47 @@ async function searchProducts(initialPage: Page, query: string, context: Browser
   return { results, page };
 }
 
+function toFullProductUrl(url: string): string {
+  return url.startsWith("http") ? url : `https://www.coupang.com${url}`;
+}
+
+function toPriceCheckResult(item: SearchResult, index: number): PriceCheckResult {
+  return {
+    ...item,
+    index: index + 1,
+    fullUrl: toFullProductUrl(item.url),
+    displayPrice: item.price.endsWith("원") ? item.price : `${item.price}원`,
+  };
+}
+
+async function withSuppressedConsoleLogs<T>(fn: () => Promise<T>): Promise<T> {
+  const originalLog = console.log;
+  const originalWarn = console.warn;
+  console.log = () => {};
+  console.warn = () => {};
+
+  try {
+    return await fn();
+  } finally {
+    console.log = originalLog;
+    console.warn = originalWarn;
+  }
+}
+
+async function fetchSearchResults(query: string, options: { silent?: boolean } = {}): Promise<SearchResult[]> {
+  const spinner = options.silent ? null : ora(`"${query}" 검색 중...`).start();
+
+  const { results } = await withBrowser(async (page, context) => {
+    spinner?.stop();
+    if (options.silent) {
+      return withSuppressedConsoleLogs(() => searchProducts(page, query, context));
+    }
+    return searchProducts(page, query, context);
+  }, false);
+
+  return results;
+}
+
 function displayResults(results: SearchResult[]): void {
   if (results.length === 0) {
     console.log(chalk.yellow("\n검색 결과가 없습니다.\n"));
@@ -495,12 +542,7 @@ function displayResults(results: SearchResult[]): void {
 }
 
 export async function search(query: string): Promise<SearchResult | undefined> {
-  const spinner = ora(`"${query}" 검색 중...`).start();
-
-  const { results } = await withBrowser(async (page, context) => {
-    spinner.stop(); // 스크린샷 로그 보이게
-    return searchProducts(page, query, context);
-  }, false);
+  const results = await fetchSearchResults(query);
 
   displayResults(results);
 
@@ -528,6 +570,46 @@ export async function search(query: string): Promise<SearchResult | undefined> {
   }
 
   return results[selectedIndex - 1];
+}
+
+function displayPriceCheckResults(results: PriceCheckResult[], totalCount: number): void {
+  if (results.length === 0) {
+    console.log(chalk.yellow("\n검색 결과가 없습니다.\n"));
+    return;
+  }
+
+  console.log(chalk.blue(`\n가격 조회 결과 (${results.length}개 표시 / 전체 ${totalCount}개):\n`));
+
+  for (const item of results) {
+    const rocket = item.rocketDelivery ? chalk.magenta(" 🚀로켓배송") : "";
+    const rating = item.rating ? chalk.yellow(` ★${item.rating}`) : "";
+    console.log(`  ${chalk.white(`${item.index}.`)} ${chalk.bold(item.name)}`);
+    console.log(`     ${chalk.green(item.displayPrice)}${rocket}${rating}`);
+    console.log(chalk.gray(`     ${item.fullUrl}`));
+    console.log();
+  }
+}
+
+export async function priceCheck(
+  query: string,
+  options: { limit?: number; json?: boolean } = {},
+): Promise<PriceCheckResult[]> {
+  const results = await fetchSearchResults(query, { silent: options.json });
+  const limit = Math.max(1, options.limit ?? 5);
+  const normalized = results.slice(0, limit).map(toPriceCheckResult);
+
+  if (options.json) {
+    console.log(JSON.stringify({
+      query,
+      totalCount: results.length,
+      shownCount: normalized.length,
+      results: normalized,
+    }, null, 2));
+    return normalized;
+  }
+
+  displayPriceCheckResults(normalized, results.length);
+  return normalized;
 }
 
 /**

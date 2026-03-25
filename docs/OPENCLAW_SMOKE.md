@@ -23,12 +23,12 @@ cat > ~/.coupang-session/credentials.json <<'JSON'
 JSON
 ```
 
-가격/검색 확인(주문 없음):
+가격 조회 확인(주문 없음, 프롬프트 없음):
 
 ```bash
-COUPANG_HEADLESS=1 node scripts/cpcli-launcher.mjs search "마이노멀 바닐라 아이스크림 파인트"
+COUPANG_HEADLESS=1 node scripts/cpcli-launcher.mjs price-check --json "마이노멀 바닐라 아이스크림 파인트"
 ```
 
 주의:
-- `search` 는 상품 선택 프롬프트가 나올 수 있습니다.
+- `price-check` 는 비인터랙티브이며 JSON 출력도 지원합니다.
 - 실제 주문은 `order-now` 이므로, smoke 단계에서는 호출하지 않는 것을 권장합니다.

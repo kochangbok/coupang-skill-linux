@@ -89,6 +89,12 @@ npx playwright install firefox
 node {baseDir}/../../scripts/cpcli-launcher.mjs search "검색어"
 ```
 
+### 가격 조회
+
+```bash
+node {baseDir}/../../scripts/cpcli-launcher.mjs price-check --json "검색어"
+```
+
 ### 장바구니 담기
 
 ```bash
