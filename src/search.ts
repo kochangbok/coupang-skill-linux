@@ -282,7 +282,13 @@ export async function navigateToCoupangViaSearch(page: Page): Promise<Page> {
   return page;
 }
 
-async function searchProducts(initialPage: Page, query: string, context: BrowserContext): Promise<{ results: SearchResult[]; page: Page }> {
+interface SearchProductsResult {
+  results: SearchResult[];
+  page: Page;
+  accessDenied: boolean;
+}
+
+async function searchProducts(initialPage: Page, query: string, context: BrowserContext): Promise<SearchProductsResult> {
   // 1. 네이버 → "쿠팡" 검색 → 쿠팡 링크 클릭 → 쿠팡 이동
   let page = await navigateToCoupangViaSearch(initialPage);
 
@@ -386,11 +392,11 @@ async function searchProducts(initialPage: Page, query: string, context: Browser
       const retryText = await page.evaluate(() => document.body.innerText.slice(0, 500));
       if (retryText.includes("Access Denied") || retryText.includes("접근이 거부")) {
         console.log(chalk.red("   재시도에도 Access Denied. 스크린샷을 확인하세요."));
-        return { results: [], page };
+        return { results: [], page, accessDenied: true };
       }
     } else {
       console.log(chalk.red("   Access Denied 후 검색창을 찾을 수 없습니다."));
-      return { results: [], page };
+      return { results: [], page, accessDenied: true };
     }
   }
 
@@ -475,7 +481,7 @@ async function searchProducts(initialPage: Page, query: string, context: Browser
     return parsed;
   });
 
-  return { results, page };
+  return { results, page, accessDenied: false };
 }
 
 function toFullProductUrl(url: string): string {
@@ -505,18 +511,46 @@ async function withSuppressedConsoleLogs<T>(fn: () => Promise<T>): Promise<T> {
   }
 }
 
-async function fetchSearchResults(query: string, options: { silent?: boolean } = {}): Promise<SearchResult[]> {
+interface FetchSearchResultsOptions {
+  silent?: boolean;
+  preferredBrowser?: "firefox" | "chromium";
+}
+
+interface FetchSearchResultsResult {
+  results: SearchResult[];
+  accessDenied: boolean;
+}
+
+async function fetchSearchResults(
+  query: string,
+  options: FetchSearchResultsOptions = {},
+): Promise<FetchSearchResultsResult> {
   const spinner = options.silent ? null : ora(`"${query}" 검색 중...`).start();
+  const previousBrowser = process.env.COUPANG_BROWSER;
 
-  const { results } = await withBrowser(async (page, context) => {
-    spinner?.stop();
-    if (options.silent) {
-      return withSuppressedConsoleLogs(() => searchProducts(page, query, context));
+  if (options.preferredBrowser) {
+    process.env.COUPANG_BROWSER = options.preferredBrowser;
+  }
+
+  try {
+    const { results, accessDenied } = await withBrowser(async (page, context) => {
+      spinner?.stop();
+      if (options.silent) {
+        return withSuppressedConsoleLogs(() => searchProducts(page, query, context));
+      }
+      return searchProducts(page, query, context);
+    }, false);
+
+    return { results, accessDenied };
+  } finally {
+    if (options.preferredBrowser) {
+      if (previousBrowser === undefined) {
+        delete process.env.COUPANG_BROWSER;
+      } else {
+        process.env.COUPANG_BROWSER = previousBrowser;
+      }
     }
-    return searchProducts(page, query, context);
-  }, false);
-
-  return results;
+  }
 }
 
 function displayResults(results: SearchResult[]): void {
@@ -542,7 +576,7 @@ function displayResults(results: SearchResult[]): void {
 }
 
 export async function search(query: string): Promise<SearchResult | undefined> {
-  const results = await fetchSearchResults(query);
+  const { results } = await fetchSearchResults(query);
 
   displayResults(results);
 
@@ -594,21 +628,42 @@ export async function priceCheck(
   query: string,
   options: { limit?: number; json?: boolean } = {},
 ): Promise<PriceCheckResult[]> {
-  const results = await fetchSearchResults(query, { silent: options.json });
+  const explicitBrowser = process.env.COUPANG_BROWSER?.trim();
+  const attemptBrowsers = explicitBrowser ? [undefined] : ["firefox", "chromium"] as const;
+  let lastResult: FetchSearchResultsResult = { results: [], accessDenied: false };
+
+  for (const preferredBrowser of attemptBrowsers) {
+    try {
+      lastResult = await fetchSearchResults(query, {
+        silent: options.json,
+        preferredBrowser,
+      });
+    } catch (error) {
+      if (preferredBrowser === attemptBrowsers[attemptBrowsers.length - 1]) {
+        throw error;
+      }
+      continue;
+    }
+
+    if (lastResult.results.length > 0 || !lastResult.accessDenied || preferredBrowser === attemptBrowsers[attemptBrowsers.length - 1]) {
+      break;
+    }
+  }
+
   const limit = Math.max(1, options.limit ?? 5);
-  const normalized = results.slice(0, limit).map(toPriceCheckResult);
+  const normalized = lastResult.results.slice(0, limit).map(toPriceCheckResult);
 
   if (options.json) {
     console.log(JSON.stringify({
       query,
-      totalCount: results.length,
+      totalCount: lastResult.results.length,
       shownCount: normalized.length,
       results: normalized,
     }, null, 2));
     return normalized;
   }
 
-  displayPriceCheckResults(normalized, results.length);
+  displayPriceCheckResults(normalized, lastResult.results.length);
   return normalized;
 }
 

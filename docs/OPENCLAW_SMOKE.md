@@ -31,4 +31,5 @@ COUPANG_HEADLESS=1 node scripts/cpcli-launcher.mjs price-check --json "마이노
 
 주의:
 - `price-check` 는 비인터랙티브이며 JSON 출력도 지원합니다.
+- `COUPANG_BROWSER` 를 지정하지 않으면 가격 조회 시 Firefox → Chromium 순서로 한 번 더 시도합니다.
 - 실제 주문은 `order-now` 이므로, smoke 단계에서는 호출하지 않는 것을 권장합니다.

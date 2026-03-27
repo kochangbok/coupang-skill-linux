@@ -346,12 +346,12 @@ async function searchProducts(initialPage, query, context) {
             const retryText = await page.evaluate(() => document.body.innerText.slice(0, 500));
             if (retryText.includes("Access Denied") || retryText.includes("접근이 거부")) {
                 console.log(chalk.red("   재시도에도 Access Denied. 스크린샷을 확인하세요."));
-                return { results: [], page };
+                return { results: [], page, accessDenied: true };
             }
         }
         else {
             console.log(chalk.red("   Access Denied 후 검색창을 찾을 수 없습니다."));
-            return { results: [], page };
+            return { results: [], page, accessDenied: true };
         }
     }
     // 검색 결과 파싱 (여러 셀렉터 시도)
@@ -417,7 +417,7 @@ async function searchProducts(initialPage, query, context) {
         });
         return parsed;
     });
-    return { results, page };
+    return { results, page, accessDenied: false };
 }
 function toFullProductUrl(url) {
     return url.startsWith("http") ? url : `https://www.coupang.com${url}`;
@@ -445,14 +445,30 @@ async function withSuppressedConsoleLogs(fn) {
 }
 async function fetchSearchResults(query, options = {}) {
     const spinner = options.silent ? null : ora(`"${query}" 검색 중...`).start();
-    const { results } = await withBrowser(async (page, context) => {
-        spinner?.stop();
-        if (options.silent) {
-            return withSuppressedConsoleLogs(() => searchProducts(page, query, context));
+    const previousBrowser = process.env.COUPANG_BROWSER;
+    if (options.preferredBrowser) {
+        process.env.COUPANG_BROWSER = options.preferredBrowser;
+    }
+    try {
+        const { results, accessDenied } = await withBrowser(async (page, context) => {
+            spinner?.stop();
+            if (options.silent) {
+                return withSuppressedConsoleLogs(() => searchProducts(page, query, context));
+            }
+            return searchProducts(page, query, context);
+        }, false);
+        return { results, accessDenied };
+    }
+    finally {
+        if (options.preferredBrowser) {
+            if (previousBrowser === undefined) {
+                delete process.env.COUPANG_BROWSER;
+            }
+            else {
+                process.env.COUPANG_BROWSER = previousBrowser;
+            }
         }
-        return searchProducts(page, query, context);
-    }, false);
-    return results;
+    }
 }
 function displayResults(results) {
     if (results.length === 0) {
@@ -470,7 +486,7 @@ function displayResults(results) {
     });
 }
 export async function search(query) {
-    const results = await fetchSearchResults(query);
+    const { results } = await fetchSearchResults(query);
     displayResults(results);
     if (results.length === 0) {
         console.log(chalk.gray("   스크린샷: ~/.coupang-session/screenshots/ 에서 확인 가능\n"));
@@ -511,19 +527,38 @@ function displayPriceCheckResults(results, totalCount) {
     }
 }
 export async function priceCheck(query, options = {}) {
-    const results = await fetchSearchResults(query, { silent: options.json });
+    const explicitBrowser = process.env.COUPANG_BROWSER?.trim();
+    const attemptBrowsers = explicitBrowser ? [undefined] : ["firefox", "chromium"];
+    let lastResult = { results: [], accessDenied: false };
+    for (const preferredBrowser of attemptBrowsers) {
+        try {
+            lastResult = await fetchSearchResults(query, {
+                silent: options.json,
+                preferredBrowser,
+            });
+        }
+        catch (error) {
+            if (preferredBrowser === attemptBrowsers[attemptBrowsers.length - 1]) {
+                throw error;
+            }
+            continue;
+        }
+        if (lastResult.results.length > 0 || !lastResult.accessDenied || preferredBrowser === attemptBrowsers[attemptBrowsers.length - 1]) {
+            break;
+        }
+    }
     const limit = Math.max(1, options.limit ?? 5);
-    const normalized = results.slice(0, limit).map(toPriceCheckResult);
+    const normalized = lastResult.results.slice(0, limit).map(toPriceCheckResult);
     if (options.json) {
         console.log(JSON.stringify({
             query,
-            totalCount: results.length,
+            totalCount: lastResult.results.length,
             shownCount: normalized.length,
             results: normalized,
         }, null, 2));
         return normalized;
     }
-    displayPriceCheckResults(normalized, results.length);
+    displayPriceCheckResults(normalized, lastResult.results.length);
     return normalized;
 }
 /**

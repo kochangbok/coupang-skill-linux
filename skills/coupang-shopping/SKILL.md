@@ -95,6 +95,8 @@ node {baseDir}/../../scripts/cpcli-launcher.mjs search "검색어"
 node {baseDir}/../../scripts/cpcli-launcher.mjs price-check --json "검색어"
 ```
 
+브라우저를 명시하지 않으면 `price-check` 는 Firefox → Chromium 순서로 자동 재시도합니다.
+
 ### 장바구니 담기
 
 ```bash

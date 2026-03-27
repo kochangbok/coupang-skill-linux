@@ -97,6 +97,8 @@ cpcli price-check "마이노멀 바닐라 아이스크림 파인트"
 cpcli price-check "마이노멀 바닐라 아이스크림 파인트" --json
 ```
 
+브라우저를 명시하지 않으면 `price-check` 는 Firefox → Chromium 순서로 자동 재시도합니다.
+
 ### 검색 → 바로 주문
 
 ```bash
